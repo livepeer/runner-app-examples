@@ -38,8 +38,8 @@ The orchestrator is a **transparent reverse proxy**: every endpoint you expose i
 
 - **HTTP** request/response — the common case. (`hello-world`, `tiles`, `api-proxy`)
 - **HTTP + SSE** — streamed / token responses. (`vllm`)
-- **Trickle** — continuous realtime video in/out. (`echo`)
-- **WebSocket** — long-lived bidirectional sessions. (`realtime-transcription`)
+- **Trickle** — continuous realtime video in/out. (`echo`, `comfystream`)
+- **WebSocket** — long-lived bidirectional sessions. (`realtime-transcription`, `comfystream`)
 
 Need a transport that isn't here? [Open an issue](https://github.com/livepeer/runner-app-examples/issues).
 
@@ -51,6 +51,7 @@ Need a transport that isn't here? [Open an issue](https://github.com/livepeer/ru
 | [`tiles`](./tiles)                                   | Capacity fan-out — one call per tile                                                     | dynamic      | single-shot | HTTP (base64 PNG) | fixed   |
 | [`api-proxy`](./api-proxy)                           | Pass calls through to hosted APIs — the operator holds the key, one capability per model | static       | single-shot | HTTP (JPEG bytes) | fixed   |
 | [`echo`](./echo)                                     | Realtime video, transformed and echoed back                                              | dynamic      | persistent  | trickle           | hour    |
+| [`comfystream`](./comfystream)                       | ComfyUI live video + analyze, plus single-shot video tools; pinned package               | dynamic      | persistent  | trickle + HTTP    | hour    |
 | [`vllm`](./vllm)                                     | Drop-in OpenAI API; the client stays unmodified                                          | static       | single-shot | HTTP + SSE        | hour    |
 | [`realtime-transcription`](./realtime-transcription) | Audio up, transcripts back, on one socket                                                | dynamic      | persistent  | WebSocket         | hour    |
 
@@ -62,7 +63,7 @@ This set stays **minimal and curated**: it covers each value of the axes above (
 
 How the app attaches to the orchestrator:
 
-- **Dynamic** — the app self-registers via the SDK (`register_runner`) and heartbeats; the orchestrator drops it when heartbeats stop. Best for apps that come and go. (`hello-world`, `echo`, `realtime-transcription`)
+- **Dynamic** — the app self-registers via the SDK (`register_runner`) and heartbeats; the orchestrator drops it when heartbeats stop. Best for apps that come and go. (`hello-world`, `echo`, `comfystream`, `realtime-transcription`)
 - **Static** — the orchestrator is configured with the app's URL in a `runners.json` and health-polls it; the app needs no SDK. Best for fixed, long-running deployments. (`vllm`, `api-proxy`)
 
 The arrow flips: dynamic, the app announces itself; static, the orchestrator is told about a passive app:
@@ -92,7 +93,7 @@ Clients read it off the discovered runner, whose `raw` holds that runner's disco
 
 Chosen _at_ registration (above); **defaults to `persistent`**, set on both `register_runner(...)` and in `runners.json`. The examples set it explicitly.
 
-- **Persistent** — a held-open session the client reserves and releases, billed per second of wall-clock (or once, with fixed pricing). Best for realtime / streaming. (`echo`, `realtime-transcription`)
+- **Persistent** — a held-open session the client reserves and releases, billed per second of wall-clock (or once, with fixed pricing). Best for realtime / streaming. (`echo`, `comfystream`, `realtime-transcription`)
 - **Single-shot** — one request in, one response out; the orchestrator reserves a session per call and releases it when the response returns, so the client manages no session at all. Best for batch / request-response. With metered pricing the call pays for as long as it runs, so the work need not be short. (`hello-world`, `tiles`, `api-proxy`, `vllm`)
 
 ## Calling your app
@@ -100,7 +101,7 @@ Chosen _at_ registration (above); **defaults to `persistent`**, set on both `reg
 The client side depends on the runner's mode:
 
 - **Single-shot** — **discover → call**: find the app via `runner_selector`, then one `call_runner`. The orchestrator reserves a session for the call and releases it when the response returns; on the paid path `call_runner` answers the 402 payment challenge inline. (`hello-world`, `tiles`, `api-proxy`, `vllm`)
-- **Persistent** — **discover → reserve → call → release**: reserve a session (`reserve_session`), call it — `call_runner`, streamed frames, or a WebSocket, depending on transport — then release it (`stop_runner_session`), which settles payment on-chain. (`echo`, `realtime-transcription`)
+- **Persistent** — **discover → reserve → call → release**: reserve a session (`reserve_session`), call it — `call_runner`, streamed frames, or a WebSocket, depending on transport — then release it (`stop_runner_session`), which settles payment on-chain. (`echo`, `comfystream`, `realtime-transcription`)
 
 Each example's `client.py` shows its exact calls: grep `# Livepeer:` to find them.
 
@@ -129,7 +130,7 @@ The orchestrator and signer services are defined once at the repo root and pulle
 
 Each example ships a `Dockerfile` and a `compose.yml` that builds it locally. Those with a `Dockerfile` are also published to the GitHub Container Registry as `ghcr.io/livepeer/runner-example-<name>` (`linux/amd64`), linked from the example's own README. Tags: `latest` (current `main`), `stable` (latest `v*` release), `1.2` / `1.2.3`, `sha-<short>`.
 
-The packages are public, so no login is needed. `compose.yml` always builds; one flag runs the published image instead:
+The packages are public, so no login is needed. `compose.yml` always builds; one flag runs the published image instead. [`comfystream`](./comfystream) is local-build only: the CUDA/ComfyUI base is too large for GitHub-hosted runners, so it is not in the publish matrix.
 
 ```sh
 docker compose up -d --pull always

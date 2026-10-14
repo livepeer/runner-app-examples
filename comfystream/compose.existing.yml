@@ -1,0 +1,34 @@
+# Attach to an already-running orchestrator. Does not start go-livepeer.
+#
+#   docker compose -f compose.existing.yml up -d --build
+#
+# Override URLs, secret, GPU, and host model/storage dirs via `.env`.
+
+services:
+  app:
+    build: .
+    container_name: example_apps_comfystream
+    restart: unless-stopped
+    network_mode: host
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=${COMFYSTREAM_GPU_UUID:-all}
+      - COMFYUI_CWD=/workspace/ComfyUI
+      - PYTHONUNBUFFERED=1
+    volumes:
+      - ${COMFYSTREAM_MODELS_DIR:-/livepeer/ai/data/models}:/workspace/ComfyUI/models
+      - ${COMFYSTREAM_STORAGE_DIR:-/livepeer/ai/data}:/app/storage
+    command:
+      - --host=0.0.0.0
+      - --orchestrator=${LIVEPEER_ORCH_URL:-https://127.0.0.1:8935}
+      - --orchSecret=${LIVEPEER_ORCH_SECRET:-abcdef}
+      - --runner-url=${LIVEPEER_RUNNER_URL:-http://127.0.0.1:8991}
+      - --workspace=/workspace/ComfyUI
+      - --capacity=1
+      - --price=${PRICE:-0}
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]

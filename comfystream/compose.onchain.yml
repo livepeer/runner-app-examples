@@ -1,0 +1,33 @@
+# On-chain payment overlay for comfystream. Layer it on the offchain base:
+#   docker compose -f compose.yml -f compose.onchain.yml up -d --build
+#
+# Adds the shared remote signer, re-points the orchestrator on-chain (see
+# ../compose.onchain.yml), and registers the app with a price so the orchestrator
+# issues a payment challenge. Requires a local .env (gitignored); copy .env.example
+# and fill it in. The session is metered, so a stream is billed for as long as it
+# runs. Then pay through the signer:
+#   uv run client.py sample.mp4 \
+#     --discovery https://localhost:8935/discovery \
+#     --signer http://localhost:7936
+
+services:
+  signer:
+    extends:
+      file: ../compose.onchain.yml
+      service: signer
+    ports:
+      - "7936:7936"
+
+  orchestrator:
+    extends:
+      file: ../compose.onchain.yml
+      service: orchestrator
+
+  app:
+    command:
+      - --host=0.0.0.0
+      - --orchestrator=https://orchestrator:8935
+      - --orchSecret=abcdef
+      - --runner-url=http://app:8991
+      - --workspace=/workspace/ComfyUI
+      - --price=${PRICE}

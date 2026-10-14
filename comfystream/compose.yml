@@ -1,0 +1,36 @@
+# End-to-end offchain demo: orchestrator + ComfyStream live-runner.
+#
+# The image starts FROM livepeer/comfystream and installs the comfystream
+# package pinned in the Dockerfile. Requires an NVIDIA GPU. Built locally only.
+#   docker compose up -d --build
+#   uv run client.py sample.mp4
+
+services:
+  orchestrator:
+    extends:
+      file: ../compose.orchestrator.yml
+      service: orchestrator
+
+  app:
+    build: .
+    container_name: example_apps_comfystream
+    depends_on:
+      orchestrator:
+        condition: service_healthy
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=${NVIDIA_VISIBLE_DEVICES:-all}
+      - COMFYUI_CWD=/workspace/ComfyUI
+      - PYTHONUNBUFFERED=1
+    command:
+      - --host=0.0.0.0
+      - --orchestrator=https://orchestrator:8935
+      - --orchSecret=abcdef
+      - --runner-url=http://app:8991
+      - --workspace=/workspace/ComfyUI
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]

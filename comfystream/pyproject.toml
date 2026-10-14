@@ -1,0 +1,10 @@
+[project]
+name = "livepeer-comfystream"
+version = "0.1.0"
+description = "ComfyStream (workflow-driven video + analyze) example app for the Livepeer network."
+requires-python = ">=3.12"
+dependencies = [
+    "av",
+    "aiohttp",
+    "livepeer-gateway>=1.0.0",
+]
