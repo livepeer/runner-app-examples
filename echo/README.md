@@ -32,13 +32,12 @@ sequenceDiagram
 
     Note over C,O: 1. Reserve a session
     C->>O: reserve_session(discovery_url, app, signer_url)
-    O-->>C: session (session_id, app_url)
     opt paid path, signer_url set
-        C->>O: answer the 402 payment challenge through the signer
-        loop while the session is held
-            C->>O: keep the metered session funded in the background
-        end
+        O-->>C: 402 payment challenge
+        C->>O: answer the challenge through the signer
     end
+    O-->>C: session (session_id, app_url)
+    Note over C,O: On the paid path, the client keeps the session funded in the background until the async with block exits
 
     Note over C,R: 2. Open the channels
     C->>O: POST app_url/echo (mode, radius, audio)
@@ -49,16 +48,18 @@ sequenceDiagram
 
     Note over C,T: 3. Stream
     par client publishes
-        C->>T: MediaPublish: frames into in
+        loop for each decoded frame
+            opt blur mode, when the next radius step is due
+                C->>O: POST app_url/update (mode, radius)
+                O->>R: forward POST /update
+            end
+            C->>T: MediaPublish: frame into in
+        end
     and runner transforms
         T-->>R: MediaOutput: frames out of in
         R->>T: MediaPublish: transformed frames into out
     and client reads
         T-->>C: MediaOutput: frames out of out, written to a file or stdout
-    end
-    opt blur mode
-        C->>O: POST app_url/update (mode, radius)
-        O->>R: forward POST /update
     end
 
     Note over C,O: 4. Release
