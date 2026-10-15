@@ -17,6 +17,57 @@ Prerequisites (Docker, `uv`, the [SDK](https://pypi.org/project/livepeer-gateway
 
 The app is **dynamically registered**: it self-registers with the orchestrator via `register_runner` ([runner.py](runner.py)) and exposes `POST /echo` (start a session, open trickle `in`/`out` channels with `create_trickle_channels`) and `POST /update` (change the transform mid-stream), both reverse-proxied through the orchestrator. The client calls it with `reserve_session` → `MediaPublish`/`MediaOutput` → `stop_runner_session` ([client.py](client.py)) — reserve a session, publish frames into `in`, read the transformed output from `out`, release. Grep `# Livepeer:` in either file to see the exact calls. Frame decode/encode is PyAV; the transforms are OpenCV.
 
+The flow end to end, from startup to release:
+
+```mermaid
+sequenceDiagram
+    participant R as Runner (runner.py)
+    participant O as Orchestrator
+    participant C as Client (client.py)
+    participant T as Trickle channels (in, out)
+
+    Note over R,O: Startup
+    R->>O: register_runner(app, mode=persistent, price in USD per hour)
+    O-->>R: registration (runner_id)
+
+    Note over C,O: 1. Reserve a session
+    C->>O: reserve_session(discovery_url, app, signer_url)
+    O-->>C: session (session_id, app_url)
+    opt paid path, signer_url set
+        C->>O: answer the 402 payment challenge through the signer
+        loop while the session is held
+            C->>O: keep the metered session funded in the background
+        end
+    end
+
+    Note over C,R: 2. Open the channels
+    C->>O: POST app_url/echo (mode, radius, audio)
+    O->>R: forward POST /echo
+    R->>O: create_trickle_channels(in, out) using the request's Session-Control header
+    O-->>R: channel urls (public and internal)
+    R-->>C: in_url and out_url, through the orchestrator
+
+    Note over C,T: 3. Stream
+    par client publishes
+        C->>T: MediaPublish: frames into in
+    and runner transforms
+        T-->>R: MediaOutput: frames out of in
+        R->>T: MediaPublish: transformed frames into out
+    and client reads
+        T-->>C: MediaOutput: frames out of out, written to a file or stdout
+    end
+    opt blur mode
+        C->>O: POST app_url/update (mode, radius)
+        O->>R: forward POST /update
+    end
+
+    Note over C,O: 4. Release
+    C->>T: close the publisher and wait for out to drain
+    C->>O: leave the async with block, which stops the funding
+    C->>O: stop_runner_session(session)
+    Note over R,O: On runner shutdown: registration.close()
+```
+
 echo registers **dynamically** as the natural fit for a stateful app that already embeds the SDK (heartbeats, capacity, lifecycle). Trickle itself isn't tied to dynamic, though: `create_trickle_channels` rides the orchestrator's per-request `Livepeer-Session-Control` header, so a static runner exposing the same endpoints could open channels too.
 
 ## Held-open sessions — what this shows
