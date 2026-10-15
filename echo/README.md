@@ -37,7 +37,7 @@ sequenceDiagram
         C->>O: answer the challenge through the signer
     end
     O-->>C: session (session_id, app_url)
-    Note over C,O: On the paid path, the client keeps the session funded in the background until the async with block exits
+    Note over R,C: On the paid path, the client keeps the session funded in the background until the async with block exits
 
     Note over C,R: 2. Open the channels
     C->>O: POST app_url/echo (mode, radius, audio)
